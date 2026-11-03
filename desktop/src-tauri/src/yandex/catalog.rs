@@ -735,6 +735,241 @@ impl Yandex {
         self.trailer(&format!("/users/{uid}/playlists/{kind}/trailer"))
             .await
     }
+
+    pub async fn artist_clips(&self, artist_id: &str) -> Result<Vec<ClipDto>, String> {
+        let mut all_raw = Vec::new();
+
+        // 1. Проверяем brief-info, где лежат videos и clips артиста
+        if let Ok(info) = self.get_result(&format!("/artists/{artist_id}/brief-info")).await {
+            if let Some(videos) = info.get("videos").and_then(|v| v.as_array()) {
+                all_raw.extend(videos.clone());
+            }
+            if let Some(clips) = info.get("clips").and_then(|v| v.as_array()) {
+                all_raw.extend(clips.clone());
+            }
+        }
+
+        // 2. Если в brief-info ничего не было, пробуем эндпоинты artist-clips и clips
+        if all_raw.is_empty() {
+            if let Ok(val) = self.get_result(&format!("/artists/{artist_id}/blocks/artist-clips")).await {
+                if let Some(items) = val.get("items").and_then(|v| v.as_array()) {
+                    for item in items {
+                        let clip_data = item
+                            .get("data")
+                            .and_then(|d| d.get("clip"))
+                            .or_else(|| item.get("data"))
+                            .or_else(|| item.get("clip"));
+                        if let Some(c) = clip_data {
+                            all_raw.push(c.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        if all_raw.is_empty() {
+            if let Ok(val) = self.get_result(&format!("/artists/{artist_id}/clips")).await {
+                let arr = val
+                    .get("clips")
+                    .and_then(|v| v.as_array())
+                    .or_else(|| val.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                all_raw.extend(arr);
+            }
+        }
+
+        Ok(all_raw
+            .into_iter()
+            .filter_map(|raw| Self::parse_clip(&raw))
+            .collect())
+    }
+
+    pub async fn resolve_clip_stream(
+        &self,
+        clip_id: &str,
+        embed_url: Option<&str>,
+    ) -> Result<ClipStreamDto, String> {
+        let target_url = if let Some(url) = embed_url.filter(|s| !s.trim().is_empty()) {
+            if url.starts_with("http") {
+                url.to_string()
+            } else {
+                format!("https:{url}")
+            }
+        } else if clip_id.chars().all(|c| c.is_ascii_digit()) && !clip_id.is_empty() {
+            format!("https://frontend.vh.yandex.ru/player/{clip_id}?no_ad=true&service=ya-video&from=ya-music-android")
+        } else {
+            return Err("Неверный ID клипа или URL".to_string());
+        };
+
+        let resp = self
+            .http
+            .get(&target_url)
+            .header(
+                reqwest::header::USER_AGENT,
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            )
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let html = resp.text().await.map_err(|e| e.to_string())?;
+
+        let hls_url = extract_url_with_ext(&html, "master.m3u8");
+        let video_url = extract_url_with_ext(&html, ".mp4");
+        let duration_ms = extract_duration_ms(&html);
+
+        Ok(ClipStreamDto {
+            hls_url,
+            video_url,
+            duration_ms,
+        })
+    }
+
+    pub async fn clip(&self, clip_id: &str) -> Result<ClipDto, String> {
+        if clip_id.chars().all(|c| c.is_ascii_digit()) && !clip_id.is_empty() {
+            if let Ok(stream) = self.resolve_clip_stream(clip_id, None).await {
+                if stream.hls_url.is_some() || stream.video_url.is_some() {
+                    return Ok(ClipDto {
+                        id: clip_id.to_string(),
+                        title: "Клип".to_string(),
+                        cover_url: None,
+                        duration_ms: stream.duration_ms,
+                        video_url: stream.video_url,
+                        hls_url: stream.hls_url,
+                        embed_url: Some(format!(
+                            "https://frontend.vh.yandex.ru/player/{clip_id}?no_ad=true&service=ya-video&from=ya-music-android"
+                        )),
+                        track_id: None,
+                        artists: vec![],
+                    });
+                }
+            }
+        }
+
+        let result = self
+            .get_result(&format!("/clips?clip-ids={clip_id}"))
+            .await?;
+        let item = result
+            .get(0)
+            .cloned()
+            .or_else(|| {
+                result
+                    .get("clips")
+                    .and_then(|v| v.as_array())
+                    .and_then(|a| a.first().cloned())
+            })
+            .ok_or_else(|| "Клип не найден".to_string())?;
+        Self::parse_clip(&item).ok_or_else(|| "Не удалось разобрать клип".to_string())
+    }
+
+    fn parse_clip(raw: &serde_json::Value) -> Option<ClipDto> {
+        let id = raw
+            .get("providerVideoId")
+            .or_else(|| raw.get("clipId"))
+            .or_else(|| raw.get("id"))
+            .map(val_to_id)
+            .filter(|s| !s.is_empty())?;
+
+        let title = raw
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Клип")
+            .to_string();
+
+        let cover_raw = match raw.get("cover") {
+            Some(serde_json::Value::String(s)) => Some(s.clone()),
+            Some(obj) => str_at(obj, &["uri"]),
+            None => raw
+                .get("thumbnail")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .or_else(|| {
+                    raw.get("ogImage")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                }),
+        };
+        let cover_url = img(cover_raw.as_deref(), "600x600");
+
+        let duration_ms = raw
+            .get("durationMs")
+            .and_then(|v| v.as_i64())
+            .or_else(|| {
+                raw.get("duration")
+                    .and_then(|v| v.as_i64())
+                    .map(|sec| sec * 1000)
+            });
+
+        let embed_url = raw
+            .get("embedUrl")
+            .or_else(|| raw.get("embed_url"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let mut video_url = raw
+            .get("videoUrl")
+            .and_then(|v| v.as_str())
+            .or_else(|| raw.get("previewUrl").and_then(|v| v.as_str()))
+            .or_else(|| raw.get("preview_url").and_then(|v| v.as_str()))
+            .map(|s| s.to_string());
+
+        let mut hls_url = raw
+            .get("hlsUrl")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or_else(|| raw.get("streamUrl").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .or_else(|| raw.get("playbackUrl").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .or_else(|| str_at(raw, &["stream", "url"]));
+
+        if hls_url.is_none() && video_url.is_none() {
+            if let Some(streams) = raw.get("streams").and_then(|s| s.as_array()) {
+                for s in streams {
+                    if let Some(url) = s.get("url").and_then(|u| u.as_str()) {
+                        if url.contains(".m3u8") && hls_url.is_none() {
+                            hls_url = Some(url.to_string());
+                        } else if video_url.is_none() {
+                            video_url = Some(url.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(ref v) = video_url {
+            if v.contains(".m3u8") && hls_url.is_none() {
+                hls_url = video_url.take();
+            }
+        }
+
+        let track_id = raw
+            .get("trackId")
+            .or_else(|| raw.get("track_id"))
+            .map(val_to_id)
+            .filter(|s| !s.is_empty());
+
+        let artists = raw
+            .get("artists")
+            .and_then(|a| a.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|a| serde_json::from_value::<YArtist>(a.clone()).ok())
+                    .map(|a| map_artist(&a))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Some(ClipDto {
+            id,
+            title,
+            cover_url,
+            duration_ms,
+            video_url,
+            hls_url,
+            embed_url,
+            track_id,
+            artists,
+        })
+    }
 }
 
 fn major_name(value: Option<&serde_json::Value>) -> Option<String> {
@@ -787,4 +1022,27 @@ fn distributor(value: Option<&serde_json::Value>) -> Option<String> {
     } else {
         Some(names.join(", "))
     }
+}
+
+fn extract_url_with_ext(html: &str, ext: &str) -> Option<String> {
+    let pos = html.find(ext)?;
+    let start = html[..pos].rfind("http")?;
+    let delims = ['"', '\'', '\\', '<', '>', ' ', '\t', '\n', '\r'];
+    let end_offset = html[pos..]
+        .find(|c: char| delims.contains(&c))
+        .unwrap_or(html[pos..].len());
+    let raw = &html[start..pos + end_offset];
+    Some(raw.replace(r"\u0026", "&").replace("&amp;", "&"))
+}
+
+fn extract_duration_ms(html: &str) -> Option<i64> {
+    let key = "\"duration\":";
+    let pos = html.find(key)?;
+    let after = &html[pos + key.len()..];
+    let digits: String = after
+        .trim_start()
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    digits.parse::<i64>().ok().map(|sec| sec * 1000)
 }

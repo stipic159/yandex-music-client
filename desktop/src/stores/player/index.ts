@@ -1643,6 +1643,10 @@ export const usePlayerStore = defineStore("player", {
       this.shuffle = true;
     },
 
+    pause() {
+      audio.pause();
+    },
+
     async toggle() {
       if (!this.current) return;
       if (this.pendingResume) {

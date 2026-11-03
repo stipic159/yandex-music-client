@@ -434,6 +434,59 @@
             </div>
           </template>
 
+          <!-- ── Clips section ──────────────────────────────────── -->
+          <template v-if="clips.length">
+            <div class="flex items-end justify-between mt-[34px] mx-0 mb-[12px] gap-[12px]">
+              <div class="text-[calc(17px*var(--text-scale,1))] font-semibold tracking-[-0.02em]">
+                Клипы <span class="text-[color:var(--fg-faint)] text-[13px] font-normal">{{ clips.length }}</span>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap gap-[14px]">
+              <div
+                v-for="(c, i) in clips"
+                :key="c.id"
+                class="group relative rounded-[12px] overflow-hidden cursor-pointer bg-[var(--surface-2)] hover:bg-[var(--surface)] transition-[background] duration-[160ms]"
+                style="width: 220px"
+                @click="openClip(c, i)"
+              >
+                <!-- 16:9 cover -->
+                <div class="relative w-full" style="aspect-ratio: 16/9">
+                  <img
+                    v-if="c.cover_url"
+                    :src="c.cover_url"
+                    loading="lazy"
+                    decoding="async"
+                    class="w-full h-full object-cover block"
+                  />
+                  <div v-else class="w-full h-full flex items-center justify-center text-[color:var(--fg-faint)]">
+                    <Icon name="mingcute:video-line" :size="28" />
+                  </div>
+                  <!-- Hover overlay -->
+                  <div class="absolute inset-0 bg-[rgba(0,0,0,0.38)] opacity-0 group-hover:opacity-100 transition-opacity duration-[160ms] flex items-center justify-center">
+                    <div class="w-[42px] h-[42px] rounded-full bg-[rgba(255,255,255,0.92)] flex items-center justify-center">
+                      <Icon name="mingcute:play-fill" :size="20" class="text-[#111]" />
+                    </div>
+                  </div>
+                  <!-- Duration badge -->
+                  <div
+                    v-if="c.duration_ms"
+                    class="absolute right-[7px] bottom-[7px] px-[7px] py-[2px] rounded-[6px] bg-[rgba(0,0,0,0.72)] text-[#fff] text-[11px] font-medium pointer-events-none"
+                  >
+                    {{ formatDuration(c.duration_ms) }}
+                  </div>
+                </div>
+                <!-- Info -->
+                <div class="p-[10px]">
+                  <div class="text-[calc(13px*var(--text-scale,1))] font-medium truncate">{{ c.title }}</div>
+                  <div class="text-[color:var(--fg-faint)] text-[calc(11px*var(--text-scale,1))] truncate">
+                    {{ c.artists.length ? c.artists.map((a) => a.name).join(', ') : artist?.name }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+
           <ImageViewer
             v-model:open="viewerOpen"
             :images="coverImages"
@@ -464,25 +517,28 @@ import { useRouter } from "vue-router";
 import { Notify } from "quasar";
 import { api } from "@/api/client";
 
-import type { ArtistLink, ArtistPage } from "@/api/types";
+import type { ArtistLink, ArtistPage, Clip } from "@/api/types";
 import LazyTracks from "@/components/common/LazyTracks.vue";
 import TrackRow from "@/components/common/TrackRow.vue";
 import ImageViewer from "@/components/common/ImageViewer.vue";
 import ArtistInfoDialog from "@/components/dialog/ArtistInfoDialog.vue";
 import AiTag from "@/components/common/AiTag.vue";
 import TrailerButton from "@/components/common/TrailerButton.vue";
-import { plural, pluralWord } from "@/lib/format";
+import { plural, pluralWord, formatDuration } from "@/lib/format";
 import { readCache, swr } from "@/lib/cache";
 import { recordArtistStats } from "@/lib/artistStats";
 import { ensureAiArtists, isAiArtist } from "@/lib/aiTag";
 import { usePlayerStore } from "@/stores/player/index";
+import { useVideoStore } from "@/stores/video";
 
 const props = defineProps<{ id: string }>();
 const router = useRouter();
 const player = usePlayerStore();
+const videoStore = useVideoStore();
 const artist = ref<ArtistPage | null>(null);
 const loading = ref(false);
 const popular = computed(() => artist.value?.tracks ?? []);
+const clips = ref<Clip[]>([]);
 const viewerOpen = ref(false);
 const infoOpen = ref(false);
 const headerCollapsed = ref(false);
@@ -680,6 +736,21 @@ function enqueuePopular() {
   Notify.create({ message: `В очередь добавлено: ${popular.value.length}` });
 }
 
+function openClip(c: Clip, index: number) {
+  const defaultArtist = artist.value
+    ? [{ id: artist.value.id, name: artist.value.name, cover_url: artist.value.cover_url }]
+    : [];
+  const all = clips.value.map((item) => ({
+    ...item,
+    artists: item.artists && item.artists.length ? item.artists : defaultArtist,
+  }));
+  const current = all[index] ?? {
+    ...c,
+    artists: c.artists && c.artists.length ? c.artists : defaultArtist,
+  };
+  videoStore.open(current, all, index);
+}
+
 function playArtistWave() {
   if (!artist.value) return;
   void player.waveByArtist({ id: props.id, name: artist.value.name });
@@ -702,21 +773,31 @@ async function playAlbum(id: string) {
 async function load() {
   const key = `artist.${props.id}`;
   headerCollapsed.value = false;
+  clips.value = [];
   const cached = readCache<ArtistPage>(key);
   artist.value = cached ?? null;
   loading.value = !cached;
 
   if (cached) recordArtistStats(cached);
 
-  await swr<ArtistPage>(key, () => api.artist(props.id), {
-    onData: (data) => {
-      artist.value = data;
-      recordArtistStats(data);
-    },
-    onSettled: () => {
-      loading.value = false;
-    },
-  });
+  const [, clipsResult] = await Promise.allSettled([
+    swr<ArtistPage>(key, () => api.artist(props.id), {
+      onData: (data) => {
+        artist.value = data;
+        recordArtistStats(data);
+      },
+      onSettled: () => {
+        loading.value = false;
+      },
+    }),
+    api.artistClips(props.id),
+  ]);
+
+  if (clipsResult.status === "fulfilled") {
+    clips.value = clipsResult.value;
+  } else {
+    console.error("Failed to load artist clips:", clipsResult.reason);
+  }
 }
 
 watch(() => props.id, load);

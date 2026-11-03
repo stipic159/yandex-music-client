@@ -5,6 +5,8 @@ import type {
   AlbumBrief,
   AlbumPage,
   ArtistPage,
+  Clip,
+  ClipStream,
   NeuroItem,
   NeuroStream,
   FeedbackPayload,
@@ -88,6 +90,16 @@ export const api = {
   artist: (id: string) => call<ArtistPage>("get_artist", { id }),
 
   artistTracks: (id: string) => call<Track[]>("get_artist_tracks", { id }),
+
+  artistClips: (id: string) => call<Clip[]>("get_artist_clips", { id }),
+
+  clip: (id: string) => call<Clip>("get_clip", { id }),
+
+  clipStream: (id: string, embedUrl?: string | null) =>
+    call<ClipStream>("get_clip_stream", { id, embedUrl: embedUrl ?? null }),
+
+  openVideoWindow: (url: string, title: string) =>
+    call<void>("open_video_window", { url, title }),
 
   aiCheckArtists: (ids: string[]) =>
     call<AiArtistResult[]>("ai_check_artists", { ids }),

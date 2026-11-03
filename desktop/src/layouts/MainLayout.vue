@@ -529,6 +529,7 @@
     <TrackLyricsDialog />
     <TrailerDialog />
     <AppDialog />
+    <VideoPlayerModal />
   </q-layout>
 </template>
 
@@ -554,6 +555,7 @@ import TogetherDock from "@/components/together/TogetherDock.vue";
 import TrackLyricsDialog from "@/components/player/TrackLyricsDialog.vue";
 import TrailerDialog from "@/components/dialog/TrailerDialog.vue";
 import AppDialog from "@/components/common/AppDialog.vue";
+import VideoPlayerModal from "@/components/player/VideoPlayerModal.vue";
 import WindowControls from "@/components/window/WindowControls.vue";
 import { trackLyricsDialog, trailerDialog } from "@/lib/dialogs";
 import {

@@ -213,3 +213,23 @@ pub struct NeuroStreamDto {
     pub color: Option<String>,
     pub stream_url: String,
 }
+
+#[derive(Serialize, Clone)]
+pub struct ClipDto {
+    pub id: String,
+    pub title: String,
+    pub cover_url: Option<String>,
+    pub duration_ms: Option<i64>,
+    pub video_url: Option<String>,
+    pub hls_url: Option<String>,
+    pub embed_url: Option<String>,
+    pub track_id: Option<String>,
+    pub artists: Vec<ArtistDto>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ClipStreamDto {
+    pub hls_url: Option<String>,
+    pub video_url: Option<String>,
+    pub duration_ms: Option<i64>,
+}

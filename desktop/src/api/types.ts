@@ -4,6 +4,24 @@ export interface Artist {
   cover_url?: string | null;
 }
 
+export interface Clip {
+  id: string;
+  title: string;
+  cover_url: string | null;
+  duration_ms: number | null;
+  video_url: string | null;
+  hls_url: string | null;
+  embed_url: string | null;
+  track_id: string | null;
+  artists: Artist[];
+}
+
+export interface ClipStream {
+  hls_url?: string | null;
+  video_url?: string | null;
+  duration_ms?: number | null;
+}
+
 export interface AiArtistResult {
   id: string;
   ai: boolean;

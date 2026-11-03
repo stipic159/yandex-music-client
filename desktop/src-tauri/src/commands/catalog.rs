@@ -2,7 +2,7 @@ use tauri::State;
 
 use crate::state::AppState;
 use crate::yandex::{
-    AlbumBriefDto, AlbumPageDto, ArtistPageDto, NeuroItemDto, NeuroStreamDto, SearchDto, TrackDto,
+    AlbumBriefDto, AlbumPageDto, ArtistPageDto, ClipDto, ClipStreamDto, NeuroItemDto, NeuroStreamDto, SearchDto, TrackDto,
     TrackInfoDto, TrailerDto, Yandex,
 };
 
@@ -108,4 +108,55 @@ pub async fn get_similar_tracks(
 ) -> Result<Vec<TrackDto>, String> {
     let session = state.session()?;
     Yandex::new(&session.token).similar_tracks(&id).await
+}
+
+#[tauri::command]
+pub async fn get_artist_clips(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ClipDto>, String> {
+    let session = state.session()?;
+    Yandex::new(&session.token).artist_clips(&id).await
+}
+
+#[tauri::command]
+pub async fn get_clip(id: String, state: State<'_, AppState>) -> Result<ClipDto, String> {
+    let session = state.session()?;
+    Yandex::new(&session.token).clip(&id).await
+}
+
+#[tauri::command]
+pub async fn get_clip_stream(
+    id: String,
+    embed_url: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<ClipStreamDto, String> {
+    let session = state.session()?;
+    Yandex::new(&session.token)
+        .resolve_clip_stream(&id, embed_url.as_deref())
+        .await
+}
+
+#[tauri::command]
+pub fn open_video_window(app: tauri::AppHandle, url: String, title: String) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(win) = app.get_webview_window("video_player") {
+        let _ = win.show();
+        let _ = win.set_focus();
+        let _ = win.eval(&format!("window.location.href = '{}';", url));
+        return Ok(());
+    }
+    let parsed_url: url::Url = url.parse().map_err(|e: url::ParseError| e.to_string())?;
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        "video_player",
+        tauri::WebviewUrl::External(parsed_url),
+    )
+    .title(&title)
+    .inner_size(960.0, 540.0)
+    .min_inner_size(480.0, 270.0)
+    .center()
+    .build()
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
