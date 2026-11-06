@@ -92,6 +92,7 @@ pub fn run() {
             commands::station_info,
             commands::set_station_settings,
             commands::get_playlists,
+            commands::playlist_like,
             commands::get_playlist_tracks,
             commands::playlist_memberships,
             commands::playlist_add_track,

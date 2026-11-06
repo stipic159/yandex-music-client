@@ -1,5 +1,5 @@
-use super::dto::{AlbumBriefDto, ArtistDto, TrackDto};
-use super::raw::{YAlbum, YArtist, YTrack};
+use super::dto::{AlbumBriefDto, ArtistDto, PlaylistDto, TrackDto};
+use super::raw::{YAlbum, YArtist, YPlaylist, YTrack};
 
 pub fn urlencode(s: &str) -> String {
     let mut out = String::new();
@@ -104,5 +104,15 @@ pub fn map_album_brief(a: &YAlbum) -> AlbumBriefDto {
             .unwrap_or_default(),
         cover_url: cover_url(&a.cover_uri),
         year: a.year,
+    }
+}
+
+pub fn map_playlist(p: &YPlaylist) -> PlaylistDto {
+    PlaylistDto {
+        kind: p.kind,
+        title: p.title.clone().unwrap_or_else(|| "Плейлист".to_string()),
+        track_count: p.track_count.unwrap_or(0),
+        cover_url: cover_url(&p.cover.as_ref().and_then(|c| c.uri.clone()).or_else(|| p.og_image.clone())),
+        owner_uid: p.owner.as_ref().and_then(|o| o.uid),
     }
 }

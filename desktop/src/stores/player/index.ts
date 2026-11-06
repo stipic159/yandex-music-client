@@ -2006,6 +2006,17 @@ export const usePlayerStore = defineStore("player", {
       Notify.create({ message: "Играет следующим" });
     },
 
+    playNextMany(tracks: Track[]) {
+      if (!tracks.length) return;
+      if (!this.queue.length) {
+        void this.playQueue(tracks, 0);
+        return;
+      }
+      this.queue.splice(this.index + 1, 0, ...tracks);
+      this.sourceQueue = [...this.queue];
+      Notify.create({ message: `Добавлено ${tracks.length} треков: играть следующими` });
+    },
+
     enqueue(track: Track) {
       if (!this.queue.length) {
         void this.playQueue([track], 0);
@@ -2014,6 +2025,17 @@ export const usePlayerStore = defineStore("player", {
       this.queue.push(track);
       this.sourceQueue = [...this.queue];
       Notify.create({ message: "Добавил в конец очереди" });
+    },
+
+    enqueueMany(tracks: Track[]) {
+      if (!tracks.length) return;
+      if (!this.queue.length) {
+        void this.playQueue(tracks, 0);
+        return;
+      }
+      this.queue.push(...tracks);
+      this.sourceQueue = [...this.queue];
+      Notify.create({ message: `Добавлено ${tracks.length} треков в конец очереди` });
     },
 
     async waveByTrack(track: Track) {

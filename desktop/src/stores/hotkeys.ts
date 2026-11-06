@@ -56,7 +56,10 @@ export const useHotkeysStore = defineStore("hotkeys", {
         const global = defaultGlobalMap();
         for (const meta of HOTKEYS) {
           const keys = saved.local?.[meta.action];
-          if (Array.isArray(keys)) local[meta.action] = keys.filter(Boolean);
+          if (Array.isArray(keys))
+            local[meta.action] = keys
+              .filter(Boolean)
+              .map((k) => k.replace(/Control/g, "Ctrl"));
           const accelerator = saved.global?.[meta.action];
           if (typeof accelerator === "string")
             global[meta.action] = accelerator;
@@ -84,8 +87,12 @@ export const useHotkeysStore = defineStore("hotkeys", {
 
     resolve(signature: string): HotkeyAction | null {
       if (!this.enabled || !signature) return null;
+      const norm = signature.replace(/Control/g, "Ctrl");
       for (const meta of HOTKEYS) {
-        if ((this.local[meta.action] || []).includes(signature))
+        const keys = (this.local[meta.action] || []).map((k) =>
+          k.replace(/Control/g, "Ctrl"),
+        );
+        if (keys.includes(norm))
           return meta.action;
       }
       return null;

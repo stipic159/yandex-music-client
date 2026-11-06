@@ -122,6 +122,8 @@ export const useLibraryStore = defineStore("library", {
       };
       return [...s.playlists].sort((a, b) => rank(a.kind) - rank(b.kind));
     },
+    isPlaylistLiked: (s) => (pl: Playlist) =>
+      s.playlists.some((p) => Number(p.kind) === Number(pl.kind)),
     visiblePlaylists(s): Playlist[] {
       return this.sortedPlaylists.filter(
         (pl: Playlist) => !s.hidden.includes(Number(pl.kind)),
@@ -300,6 +302,28 @@ export const useLibraryStore = defineStore("library", {
       } catch (e) {
         notifyError(e, "Не удалось создать плейлист");
         return null;
+      }
+    },
+
+    async togglePlaylistLike(playlist: Playlist) {
+      const liked = this.isPlaylistLiked(playlist);
+      const ownerUid = playlist.owner_uid ?? 0;
+      try {
+        const ok = await api.playlistLike(ownerUid, playlist.kind, liked);
+        if (ok) {
+          if (liked) {
+            this.playlists = this.playlists.filter(
+              (p) => Number(p.kind) !== Number(playlist.kind),
+            );
+            Notify.create({ message: "Плейлист удален из коллекции", type: "info" });
+          } else {
+            this.playlists.unshift(playlist);
+            Notify.create({ message: "Плейлист добавлен в коллекцию", type: "positive" });
+          }
+        }
+      } catch (e) {
+        Notify.create({ message: "Не удалось обновить статус плейлиста", type: "negative" });
+        console.error("togglePlaylistLike error:", e);
       }
     },
 

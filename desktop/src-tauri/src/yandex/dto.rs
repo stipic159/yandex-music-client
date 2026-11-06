@@ -164,6 +164,7 @@ pub struct SearchDto {
     pub tracks: Vec<TrackDto>,
     pub artists: Vec<ArtistDto>,
     pub albums: Vec<AlbumBriefDto>,
+    pub playlists: Vec<PlaylistDto>,
 }
 
 #[derive(Serialize)]

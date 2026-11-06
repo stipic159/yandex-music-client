@@ -838,6 +838,7 @@ import {
 import { useAuthStore } from "@/stores/auth";
 import { useLibraryStore } from "@/stores/library";
 import { useHotkeysStore } from "@/stores/hotkeys";
+import { switchKeyboardLayout, isDifferentLayout } from "@/lib/keyboardLayout";
 import { usePanelsStore } from "@/stores/panels";
 import { usePlayerStore } from "@/stores/player/index";
 import { useUiStore } from "@/stores/ui/index";
@@ -981,22 +982,36 @@ watch(query, (value) => {
     selectedSuggestIndex.value = -1;
     return;
   }
-  suggestTimer = setTimeout(() => {
-    void api
-      .searchSuggest(q)
-      .then((list) => {
-        suggestions.value = list.filter(
-          (hint) => hint.toLowerCase() !== q.toLowerCase(),
-        );
-        selectedSuggestIndex.value = -1;
-        if (suggestions.value.length) {
-          suggestOpen.value = true;
+  suggestTimer = setTimeout(async () => {
+    try {
+      const list = await api.searchSuggest(q);
+      const filtered = list.filter(
+        (hint) => hint.toLowerCase() !== q.toLowerCase(),
+      );
+
+      // Если саджестов мало или нет, проверяем переключенную раскладку клавиатуры
+      if (filtered.length < 4 && isDifferentLayout(q)) {
+        const switched = switchKeyboardLayout(q);
+        const switchedList = await api.searchSuggest(switched).catch(() => []);
+        for (const hint of switchedList) {
+          if (!filtered.includes(hint) && hint.toLowerCase() !== q.toLowerCase()) {
+            filtered.push(hint);
+          }
         }
-      })
-      .catch(() => {
-        suggestions.value = [];
-        selectedSuggestIndex.value = -1;
-      });
+        if (!filtered.includes(switched) && switched.toLowerCase() !== q.toLowerCase()) {
+          filtered.unshift(switched);
+        }
+      }
+
+      suggestions.value = filtered;
+      selectedSuggestIndex.value = -1;
+      if (suggestions.value.length) {
+        suggestOpen.value = true;
+      }
+    } catch {
+      suggestions.value = [];
+      selectedSuggestIndex.value = -1;
+    }
   }, 220);
 });
 const rightPanel = computed({
@@ -1361,9 +1376,37 @@ const hotkeyHandlers = {
   },
   lyrics: () => player.toggleLyrics(),
   queue: () => panels.toggleQueue(),
+  search: () => {
+    const sel = window.getSelection()?.toString().trim();
+    if (route.name === "search") {
+      window.dispatchEvent(
+        new CustomEvent("app:open-search", {
+          detail: { selectedText: sel || undefined },
+        }),
+      );
+      return;
+    }
+    void router.push({
+      name: "search",
+      query: sel ? { q: sel } : undefined,
+    });
+  },
 };
 
+function onAppOpenSearch(e: Event) {
+  const customEvent = e as CustomEvent<{ selectedText?: string }>;
+  const sel = customEvent.detail?.selectedText;
+  if (route.name === "search") {
+    return;
+  }
+  void router.push({
+    name: "search",
+    query: sel ? { q: sel } : undefined,
+  });
+}
+
 onMounted(() => {
+  window.addEventListener("app:open-search", onAppOpenSearch);
   hotkeys.load();
   bindLocalHotkeys((signature) => hotkeys.resolve(signature), hotkeyHandlers);
   void bindGlobalHotkeyEvents(hotkeyHandlers);
@@ -1429,6 +1472,7 @@ onBeforeUnmount(() => {
   clearTimeout(suggestTimer);
   clearTimeout(blurTimer);
   window.removeEventListener("focus", onWindowFocus);
+  window.removeEventListener("app:open-search", onAppOpenSearch);
   unbindLocalHotkeys();
   unbindGlobalHotkeyEvents();
 });

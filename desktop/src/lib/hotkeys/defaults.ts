@@ -12,7 +12,8 @@ export type HotkeyAction =
   | "next"
   | "prev"
   | "lyrics"
-  | "queue";
+  | "queue"
+  | "search";
 
 export interface HotkeyMeta {
   action: HotkeyAction;
@@ -99,6 +100,12 @@ export const HOTKEYS: HotkeyMeta[] = [
     action: "queue",
     label: "Показать / скрыть очередь",
     keys: ["Q"],
+    global: "",
+  },
+  {
+    action: "search",
+    label: "Перейти к поиску",
+    keys: ["Ctrl+F", "/"],
     global: "",
   },
 ];

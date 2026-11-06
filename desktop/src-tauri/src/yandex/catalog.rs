@@ -487,10 +487,24 @@ impl Yandex {
             }
         }
 
+        let mut playlists = Vec::new();
+        if let Some(arr) = result
+            .get("playlists")
+            .and_then(|t| t.get("results"))
+            .and_then(|r| r.as_array())
+        {
+            for item in arr.iter().take(12) {
+                if let Ok(p) = serde_json::from_value::<YPlaylist>(item.clone()) {
+                    playlists.push(map_playlist(&p));
+                }
+            }
+        }
+
         Ok(SearchDto {
             tracks,
             artists,
             albums,
+            playlists,
         })
     }
 

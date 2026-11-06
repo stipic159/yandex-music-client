@@ -26,6 +26,20 @@ export default defineBoot(() => {
     "keydown",
     (event) => {
       const key = event.key.toLowerCase();
+
+      // Перехватываем Ctrl+F / Cmd+F до того, как браузер запустит встроенный поиск по буквам на странице
+      if ((event.ctrlKey || event.metaKey) && key === "f") {
+        event.preventDefault();
+        event.stopPropagation();
+        const selectedText = window.getSelection()?.toString().trim();
+        window.dispatchEvent(
+          new CustomEvent("app:open-search", {
+            detail: { selectedText: selectedText || undefined },
+          }),
+        );
+        return;
+      }
+
       const reload =
         key === "f5" ||
         ((event.ctrlKey || event.metaKey) && key === "r");

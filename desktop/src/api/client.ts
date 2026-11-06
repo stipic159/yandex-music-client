@@ -215,6 +215,9 @@ export const api = {
 
   playlists: () => call<Playlist[]>("get_playlists"),
 
+  playlistLike: (ownerUid: number, kind: number | string, remove = false) =>
+    call<boolean>("playlist_like", { ownerUid, kind: Number(kind), remove }),
+
   playlistCreate: (title: string, isPublic = false) =>
     call<Playlist>("playlist_create", { title, public: isPublic }),
 
@@ -233,8 +236,8 @@ export const api = {
   playlistClear: (kind: number | string) =>
     call<number>("playlist_clear", { kind: Number(kind) }),
 
-  playlistTracks: (kind: number | string) =>
-    call<Track[]>("get_playlist_tracks", { kind: Number(kind) }),
+  playlistTracks: (kind: number | string, uid?: number | null) =>
+    call<Track[]>("get_playlist_tracks", { kind: Number(kind), uid: uid ?? null }),
 
   playlistMemberships: (kinds: number[]) =>
     call<PlaylistMembership[]>("playlist_memberships", { kinds }),

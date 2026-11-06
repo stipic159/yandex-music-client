@@ -1,6 +1,38 @@
 use super::*;
 
 impl Yandex {
+    pub async fn playlist_like(
+        &self,
+        uid: i64,
+        owner_uid: i64,
+        kind: i64,
+        remove: bool,
+    ) -> Result<bool, String> {
+        let action = if remove { "remove" } else { "add" };
+        let url = format!("{BASE}/users/{uid}/likes/playlists/{action}");
+        let owner = if owner_uid == 0 { uid } else { owner_uid };
+        let params = [
+            ("owner", owner.to_string()),
+            ("kinds", kind.to_string()),
+            ("kind", kind.to_string()),
+        ];
+        let resp = self
+            .http
+            .post(&url)
+            .header("Authorization", self.auth())
+            .header("X-Yandex-Music-Client", MUSIC_CLIENT)
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if resp.status().is_success() {
+            Ok(true)
+        } else {
+            Err(format!("Ошибка обновления лайка плейлиста: {}", resp.status()))
+        }
+    }
+
     pub async fn like(&self, uid: i64, track_id: &str, dislike: bool) -> Result<bool, String> {
         self.set_like(uid, track_id, dislike, false).await
     }

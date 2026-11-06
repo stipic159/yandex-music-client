@@ -71,13 +71,31 @@ pub async fn playlist_memberships(
 }
 
 #[tauri::command]
+pub async fn playlist_like(
+    owner_uid: i64,
+    kind: i64,
+    remove: bool,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    let session = state.session()?;
+    Yandex::new(&session.token)
+        .playlist_like(session.uid, owner_uid, kind, remove)
+        .await
+}
+
+#[tauri::command]
 pub async fn get_playlist_tracks(
     kind: i64,
+    uid: Option<i64>,
     state: State<'_, AppState>,
 ) -> Result<Vec<TrackDto>, String> {
     let session = state.session()?;
+    let target_uid = match uid {
+        Some(u) if u > 0 => u,
+        _ => session.uid,
+    };
     Yandex::new(&session.token)
-        .playlist_tracks(session.uid, kind)
+        .playlist_tracks(target_uid, kind)
         .await
 }
 

@@ -19,9 +19,10 @@ export function bindLocalHotkeys(
   unbindLocalHotkeys();
   localHandler = (event: KeyboardEvent) => {
     if (event.repeat || isModifierEvent(event)) return;
-    if (isTypingTarget(event.target)) return;
-    const action = resolve(eventSignature(event));
+    const sig = eventSignature(event);
+    const action = resolve(sig);
     if (!action) return;
+    if (isTypingTarget(event.target) && action !== "search") return;
     const run = handlers[action];
     if (!run) return;
     event.preventDefault();

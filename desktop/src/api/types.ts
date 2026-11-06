@@ -215,6 +215,7 @@ export interface SearchResult {
   tracks: Track[];
   artists: Artist[];
   albums: AlbumBrief[];
+  playlists: Playlist[];
 }
 
 export type FeedbackType =
